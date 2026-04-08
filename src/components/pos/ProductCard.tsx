@@ -1,48 +1,53 @@
-import { Product } from "@/data/products";
+import { Product, unitLabels } from "@/data/products";
+import { AlertTriangle } from "lucide-react";
 
 interface ProductCardProps {
   product: Product;
   onAdd: (product: Product) => void;
+  priceMode?: "retail" | "wholesale";
 }
 
-const ProductCard = ({ product, onAdd }: ProductCardProps) => {
+const ProductCard = ({ product, onAdd, priceMode = "retail" }: ProductCardProps) => {
   const isOutOfStock = product.stock <= 0;
+  const isLowStock = product.stock <= product.minStock && product.stock > 0;
+  const displayPrice = priceMode === "wholesale" ? product.wholesalePrice : product.price;
 
   return (
     <button
       onClick={() => !isOutOfStock && onAdd(product)}
       disabled={isOutOfStock}
-      className={`group bg-card rounded-xl overflow-hidden border border-border transition-all duration-200 text-right relative ${
+      className={`group relative bg-card rounded-xl border overflow-hidden text-right transition-all duration-200 ${
         isOutOfStock
-          ? "opacity-50 cursor-not-allowed"
-          : "hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10"
-      } animate-pop-in`}
+          ? "border-border opacity-60 cursor-not-allowed"
+          : "border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 cursor-pointer active:scale-[0.97]"
+      }`}
     >
-      <div className="aspect-square overflow-hidden relative">
-        <img
-          src={product.image}
-          alt={product.name}
-          loading="lazy"
-          width={512}
-          height={512}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-        {product.stock <= 10 && product.stock > 0 && (
-          <span className="absolute top-2 left-2 bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">
-            متبقي {product.stock}
-          </span>
-        )}
+      <div className="relative aspect-square overflow-hidden">
+        <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
-            <span className="bg-destructive text-destructive-foreground text-xs font-bold px-3 py-1 rounded">نفذت الكمية</span>
+          <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
+            <span className="bg-destructive text-destructive-foreground text-xs font-bold px-2 py-1 rounded">نفذت الكمية</span>
           </div>
         )}
+        {isLowStock && !isOutOfStock && (
+          <div className="absolute top-1.5 right-1.5 bg-destructive/90 text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+            <AlertTriangle className="w-3 h-3" />
+            {product.stock}
+          </div>
+        )}
+        {priceMode === "wholesale" && (
+          <div className="absolute top-1.5 left-1.5 bg-pos-info/90 text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">جملة</div>
+        )}
       </div>
-      <div className="p-3">
-        <h3 className="font-semibold text-card-foreground text-sm truncate">{product.name}</h3>
-        <p className="text-primary font-bold text-lg mt-1">
-          {product.price.toFixed(2)} <span className="text-xs text-muted-foreground">ر.س</span>
-        </p>
+      <div className="p-2.5">
+        <p className="text-foreground font-semibold text-xs truncate">{product.name}</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-primary font-bold text-sm">{displayPrice.toFixed(2)} ر.س</span>
+          <span className="text-muted-foreground text-[10px]">{unitLabels[product.unit] || product.unit}</span>
+        </div>
+        {product.barcode && (
+          <p className="text-muted-foreground text-[10px] mt-0.5 font-mono">{product.barcode}</p>
+        )}
       </div>
     </button>
   );

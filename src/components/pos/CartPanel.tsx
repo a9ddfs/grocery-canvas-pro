@@ -1,5 +1,6 @@
 import { ShoppingCart, CreditCard, Banknote, Trash2, Users, HandCoins } from "lucide-react";
-import { CartItem, Customer } from "@/data/products";
+import { CartItem } from "@/data/products";
+import { Customer } from "@/data/types";
 import CartItemRow from "./CartItemRow";
 import { useState } from "react";
 

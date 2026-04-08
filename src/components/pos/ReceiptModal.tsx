@@ -45,7 +45,7 @@ const ReceiptModal = ({ sale, onClose }: ReceiptModalProps) => {
     <div><span>رقم الفاتورة:</span><span>${sale.id.slice(-8)}</span></div>
     <div><span>التاريخ:</span><span>${new Date(sale.date).toLocaleDateString("ar-SA")}</span></div>
     <div><span>الوقت:</span><span>${new Date(sale.date).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}</span></div>
-    <div><span>طريقة الدفع:</span><span>${sale.paymentMethod === "cash" ? "نقدي" : "بطاقة"}</span></div>
+    <div><span>طريقة الدفع:</span><span>${sale.paymentMethod === "cash" ? "نقدي" : sale.paymentMethod === "card" ? "بطاقة" : "آجل"}</span></div>
   </div>
   <table>
     <thead><tr><th>المنتج</th><th>الكمية</th><th>السعر</th><th>المجموع</th></tr></thead>
@@ -104,7 +104,7 @@ const ReceiptModal = ({ sale, onClose }: ReceiptModalProps) => {
             <div className="flex justify-between"><span>رقم الفاتورة:</span><span className="text-foreground font-semibold">{sale.id.slice(-8)}</span></div>
             <div className="flex justify-between"><span>التاريخ:</span><span>{new Date(sale.date).toLocaleDateString("ar-SA")}</span></div>
             <div className="flex justify-between"><span>الوقت:</span><span>{new Date(sale.date).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}</span></div>
-            <div className="flex justify-between"><span>طريقة الدفع:</span><span>{sale.paymentMethod === "cash" ? "نقدي 💵" : "بطاقة 💳"}</span></div>
+            <div className="flex justify-between"><span>طريقة الدفع:</span><span>{sale.paymentMethod === "cash" ? "نقدي 💵" : sale.paymentMethod === "card" ? "بطاقة 💳" : "آجل 📋"}</span></div>
           </div>
 
           {/* Items */}

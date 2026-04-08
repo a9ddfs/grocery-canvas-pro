@@ -80,12 +80,12 @@ const Dashboard = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
           لوحة التحكم
         </h1>
         <div className="flex gap-2">
-          <button onClick={() => onNavigate("pos")} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:brightness-110 transition-all">
-            الكاشير
-          </button>
-          <button onClick={() => onNavigate("inventory")} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-semibold hover:bg-pos-surface-hover transition-all">
-            المخزون
-          </button>
+          <button onClick={() => onNavigate("pos")} className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:brightness-110 transition-all">الكاشير</button>
+          <button onClick={() => onNavigate("inventory")} className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-semibold hover:bg-pos-surface-hover transition-all">المخزون</button>
+          <button onClick={() => onNavigate("suppliers")} className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-semibold hover:bg-pos-surface-hover transition-all">الموردين</button>
+          <button onClick={() => onNavigate("customers")} className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-semibold hover:bg-pos-surface-hover transition-all">العملاء</button>
+          <button onClick={() => onNavigate("reports")} className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-semibold hover:bg-pos-surface-hover transition-all">التقارير</button>
+          <button onClick={() => onNavigate("cashbox")} className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-semibold hover:bg-pos-surface-hover transition-all">الصندوق</button>
         </div>
       </header>
 

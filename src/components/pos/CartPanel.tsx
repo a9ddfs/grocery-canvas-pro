@@ -37,16 +37,16 @@ const CartPanel = ({ items, total, itemCount, onUpdateQuantity, onRemove, onClea
     if (result.ok) {
       setCouponInput("");
       setCouponError("");
-    } else {
-      const map: Record<string, string> = {
-        not_found: t("invalidCoupon"),
-        inactive: t("couponInactive"),
-        expired: t("couponExpired"),
-        max_uses: t("couponMaxedOut"),
-        min_purchase: t("couponMinNotMet"),
-      };
-      setCouponError(map[result.reason] || t("invalidCoupon"));
+      return;
     }
+    const map: Record<string, string> = {
+      not_found: t("invalidCoupon"),
+      inactive: t("couponInactive"),
+      expired: t("couponExpired"),
+      max_uses: t("couponMaxedOut"),
+      min_purchase: t("couponMinNotMet"),
+    };
+    setCouponError(map[result.reason] || t("invalidCoupon"));
   };
 
   const handlePay = (method: "cash" | "card") => {

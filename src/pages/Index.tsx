@@ -6,6 +6,7 @@ import SuppliersPage from "@/components/pos/SuppliersPage";
 import CustomersPage from "@/components/pos/CustomersPage";
 import ReportsPage from "@/components/pos/ReportsPage";
 import CashboxPage from "@/components/pos/CashboxPage";
+import CouponsPage from "@/components/pos/CouponsPage";
 
 const Index = () => {
   const [page, setPage] = useState("pos");
@@ -17,6 +18,7 @@ const Index = () => {
     case "customers": return <CustomersPage onNavigate={setPage} />;
     case "reports": return <ReportsPage onNavigate={setPage} />;
     case "cashbox": return <CashboxPage onNavigate={setPage} />;
+    case "coupons": return <CouponsPage onNavigate={setPage} />;
     default: return <POSScreen onNavigate={setPage} />;
   }
 };

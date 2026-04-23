@@ -51,6 +51,8 @@ export type SaleRecord = {
   items: CartItem[];
   total: number;
   tax: number;
+  discount?: number;
+  couponCode?: string;
   grandTotal: number;
   paymentMethod: "cash" | "card" | "credit"; // أضفنا الآجل
   customerId?: string; // للبيع بالآجل

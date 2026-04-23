@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { Product, CartItem, SaleRecord, initialProducts } from "@/data/products";
-import { Supplier, PurchaseOrder, Customer, Debt, DebtPayment, Expense, CashboxEntry, Alert } from "@/data/types";
+import { Supplier, PurchaseOrder, Customer, Debt, DebtPayment, Expense, CashboxEntry, Alert, Coupon, AppliedCoupon } from "@/data/types";
 
 interface StoreState {
   products: Product[];
@@ -13,6 +13,8 @@ interface StoreState {
   expenses: Expense[];
   cashbox: CashboxEntry[];
   alerts: Alert[];
+  coupons: Coupon[];
+  appliedCoupon: AppliedCoupon | null;
   priceMode: "retail" | "wholesale";
 
   // Cart
@@ -20,9 +22,18 @@ interface StoreState {
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  cartSubtotal: () => number;
   cartTotal: () => number;
+  cartDiscount: () => number;
   cartItemCount: () => number;
   setPriceMode: (mode: "retail" | "wholesale") => void;
+
+  // Coupons
+  addCoupon: (coupon: Omit<Coupon, "id" | "createdAt" | "usedCount">) => void;
+  updateCoupon: (id: string, updates: Partial<Coupon>) => void;
+  deleteCoupon: (id: string) => void;
+  applyCouponCode: (code: string) => { ok: true } | { ok: false; reason: "not_found" | "inactive" | "expired" | "max_uses" | "min_purchase" };
+  removeAppliedCoupon: () => void;
 
   // Sales
   completeSale: (paymentMethod: "cash" | "card" | "credit", customerId?: string) => SaleRecord | null;
@@ -60,6 +71,13 @@ interface StoreState {
   dismissAlert: (id: string) => void;
 }
 
+const computeDiscount = (coupon: Coupon, subtotal: number): number => {
+  if (coupon.type === "percentage") {
+    return Math.min(subtotal, subtotal * (coupon.value / 100));
+  }
+  return Math.min(subtotal, coupon.value);
+};
+
 export const useStore = create<StoreState>((set, get) => ({
   products: initialProducts,
   cart: [],
@@ -71,6 +89,8 @@ export const useStore = create<StoreState>((set, get) => ({
   expenses: generateMockExpenses(),
   cashbox: [],
   alerts: [],
+  coupons: generateMockCoupons(),
+  appliedCoupon: null,
   priceMode: "retail",
 
   setPriceMode: (mode) => set({ priceMode: mode }),
@@ -90,15 +110,19 @@ export const useStore = create<StoreState>((set, get) => ({
       if (product.stock <= 0) return state;
       return { cart: [...state.cart, { ...product, quantity: 1, priceType: priceMode }] };
     });
+    // Recompute applied coupon discount based on new subtotal
+    get().applyCouponCode && refreshAppliedCoupon(get, set);
   },
 
   removeFromCart: (productId) => {
     set((state) => ({ cart: state.cart.filter((item) => item.id !== productId) }));
+    refreshAppliedCoupon(get, set);
   },
 
   updateCartQuantity: (productId, quantity) => {
     if (quantity <= 0) {
       set((state) => ({ cart: state.cart.filter((item) => item.id !== productId) }));
+      refreshAppliedCoupon(get, set);
       return;
     }
     set((state) => ({
@@ -106,32 +130,86 @@ export const useStore = create<StoreState>((set, get) => ({
         item.id === productId ? { ...item, quantity: Math.min(quantity, item.stock) } : item
       ),
     }));
+    refreshAppliedCoupon(get, set);
   },
 
-  clearCart: () => set({ cart: [] }),
+  clearCart: () => set({ cart: [], appliedCoupon: null }),
 
-  cartTotal: () => {
+  cartSubtotal: () => {
     return get().cart.reduce((sum, item) => {
       const price = item.priceType === "wholesale" ? item.wholesalePrice : item.price;
       return sum + price * item.quantity;
     }, 0);
   },
 
+  cartDiscount: () => get().appliedCoupon?.discountAmount ?? 0,
+
+  cartTotal: () => {
+    const subtotal = get().cartSubtotal();
+    const discount = get().cartDiscount();
+    return Math.max(0, subtotal - discount);
+  },
+
   cartItemCount: () => {
     return get().cart.reduce((sum, item) => sum + item.quantity, 0);
   },
+
+  // Coupons
+  addCoupon: (data) => {
+    set((state) => ({
+      coupons: [
+        { ...data, code: data.code.toUpperCase().trim(), id: `cpn-${Date.now()}`, createdAt: new Date(), usedCount: 0 },
+        ...state.coupons,
+      ],
+    }));
+  },
+
+  updateCoupon: (id, updates) => {
+    set((state) => ({
+      coupons: state.coupons.map((c) =>
+        c.id === id ? { ...c, ...updates, code: updates.code ? updates.code.toUpperCase().trim() : c.code } : c
+      ),
+    }));
+  },
+
+  deleteCoupon: (id) => {
+    set((state) => ({
+      coupons: state.coupons.filter((c) => c.id !== id),
+      appliedCoupon: state.appliedCoupon?.couponId === id ? null : state.appliedCoupon,
+    }));
+  },
+
+  applyCouponCode: (code) => {
+    const state = get();
+    const coupon = state.coupons.find((c) => c.code === code.toUpperCase().trim());
+    if (!coupon) return { ok: false, reason: "not_found" } as const;
+    if (!coupon.active) return { ok: false, reason: "inactive" } as const;
+    if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) return { ok: false, reason: "expired" } as const;
+    if (coupon.maxUses > 0 && coupon.usedCount >= coupon.maxUses) return { ok: false, reason: "max_uses" } as const;
+    const subtotal = state.cartSubtotal();
+    if (coupon.minPurchase > 0 && subtotal < coupon.minPurchase) return { ok: false, reason: "min_purchase" } as const;
+    const discountAmount = computeDiscount(coupon, subtotal);
+    set({ appliedCoupon: { couponId: coupon.id, code: coupon.code, discountAmount } });
+    return { ok: true } as const;
+  },
+
+  removeAppliedCoupon: () => set({ appliedCoupon: null }),
 
   completeSale: (paymentMethod, customerId) => {
     const state = get();
     if (state.cart.length === 0) return null;
 
-    const total = state.cartTotal();
+    const subtotal = state.cartSubtotal();
+    const discount = state.cartDiscount();
+    const total = Math.max(0, subtotal - discount);
     const tax = total * 0.15;
     const sale: SaleRecord = {
       id: `sale-${Date.now()}`,
       items: [...state.cart],
       total,
       tax,
+      discount: discount > 0 ? discount : undefined,
+      couponCode: state.appliedCoupon?.code,
       grandTotal: total + tax,
       paymentMethod,
       customerId,
@@ -148,7 +226,7 @@ export const useStore = create<StoreState>((set, get) => ({
       id: `cb-${Date.now()}`,
       type: "sale",
       amount: sale.grandTotal,
-      description: `بيع #${sale.id.slice(-6)} - ${paymentMethod === "cash" ? "نقدي" : paymentMethod === "card" ? "بطاقة" : "آجل"}`,
+      description: `sale#${sale.id.slice(-6)}|${paymentMethod}`,
       date: new Date(),
       referenceId: sale.id,
     };
@@ -169,12 +247,22 @@ export const useStore = create<StoreState>((set, get) => ({
       newDebts = [debt, ...state.debts];
     }
 
+    // Increment coupon usage if used
+    let newCoupons = state.coupons;
+    if (state.appliedCoupon) {
+      newCoupons = state.coupons.map((c) =>
+        c.id === state.appliedCoupon!.couponId ? { ...c, usedCount: c.usedCount + 1 } : c
+      );
+    }
+
     set({
       sales: [sale, ...state.sales],
       cart: [],
       products: updatedProducts,
       cashbox: [newCashboxEntry, ...state.cashbox],
       debts: newDebts,
+      coupons: newCoupons,
+      appliedCoupon: null,
     });
 
     return sale;
@@ -220,18 +308,18 @@ export const useStore = create<StoreState>((set, get) => ({
     const state = get();
     const purchase: PurchaseOrder = { ...data, id: `po-${Date.now()}` };
 
-    // Update stock for purchased items
     const updatedProducts = state.products.map((p) => {
       const item = data.items.find((i) => i.productId === p.id);
       if (item) return { ...p, stock: p.stock + item.quantity, costPrice: item.costPrice };
       return p;
     });
 
+    const supplierName = state.suppliers.find((s) => s.id === data.supplierId)?.name || "supplier";
     const cashboxEntry: CashboxEntry = {
       id: `cb-${Date.now()}`,
       type: "purchase",
       amount: -data.total,
-      description: `شراء من ${state.suppliers.find((s) => s.id === data.supplierId)?.name || "مورد"}`,
+      description: `purchase|${supplierName}`,
       date: new Date(),
       referenceId: purchase.id,
     };
@@ -268,11 +356,12 @@ export const useStore = create<StoreState>((set, get) => ({
       const newPaidAmount = debt.paidAmount + payment.amount;
       const newStatus = newPaidAmount >= debt.amount ? "paid" : "partial";
 
+      const customerName = state.customers.find((c) => c.id === debt.customerId)?.name || "customer";
       const cashboxEntry: CashboxEntry = {
         id: `cb-${Date.now()}`,
         type: "debt_payment",
         amount: payment.amount,
-        description: `سداد دين - ${state.customers.find((c) => c.id === debt.customerId)?.name || "عميل"}`,
+        description: `debt_payment|${customerName}`,
         date: new Date(),
         referenceId: debtId,
       };
@@ -295,7 +384,7 @@ export const useStore = create<StoreState>((set, get) => ({
       id: `cb-${Date.now()}-e`,
       type: "expense",
       amount: -data.amount,
-      description: `مصروف: ${data.description}`,
+      description: `expense|${data.description}`,
       date: new Date(),
       referenceId: expense.id,
     };
@@ -320,13 +409,14 @@ export const useStore = create<StoreState>((set, get) => ({
     const state = get();
     const alerts: Alert[] = [];
 
-    // Low/out of stock
     state.products.forEach((p) => {
       if (p.stock === 0) {
         alerts.push({
           id: `alert-oos-${p.id}`,
           type: "out_of_stock",
-          message: `${p.name} نفذ من المخزون!`,
+          message: `${p.name} - out of stock`,
+          i18nKey: "out_of_stock",
+          i18nParams: { productId: p.id, name: p.name },
           severity: "critical",
           date: new Date(),
           dismissed: false,
@@ -336,7 +426,9 @@ export const useStore = create<StoreState>((set, get) => ({
         alerts.push({
           id: `alert-ls-${p.id}`,
           type: "low_stock",
-          message: `${p.name} - الكمية المتبقية: ${p.stock} (الحد الأدنى: ${p.minStock})`,
+          message: `${p.name} - low stock`,
+          i18nKey: "low_stock",
+          i18nParams: { productId: p.id, name: p.name, stock: p.stock, minStock: p.minStock },
           severity: "warning",
           date: new Date(),
           dismissed: false,
@@ -345,7 +437,6 @@ export const useStore = create<StoreState>((set, get) => ({
       }
     });
 
-    // Overdue debts
     const now = new Date();
     state.debts.forEach((d) => {
       if (d.status !== "paid" && new Date(d.dueDate) < now) {
@@ -353,7 +444,9 @@ export const useStore = create<StoreState>((set, get) => ({
         alerts.push({
           id: `alert-debt-${d.id}`,
           type: "overdue_debt",
-          message: `دين متأخر - ${customer?.name || "عميل"}: ${(d.amount - d.paidAmount).toFixed(2)} ر.س`,
+          message: `overdue debt`,
+          i18nKey: "overdue_debt",
+          i18nParams: { customerName: customer?.name || "customer", amount: (d.amount - d.paidAmount).toFixed(2) },
           severity: "critical",
           date: new Date(),
           dismissed: false,
@@ -370,6 +463,28 @@ export const useStore = create<StoreState>((set, get) => ({
     }));
   },
 }));
+
+// Helper: re-evaluate the applied coupon when cart changes (handles min_purchase / discount value)
+function refreshAppliedCoupon(get: () => StoreState, set: (s: Partial<StoreState>) => void) {
+  const state = get();
+  const applied = state.appliedCoupon;
+  if (!applied) return;
+  const coupon = state.coupons.find((c) => c.id === applied.couponId);
+  if (!coupon) {
+    set({ appliedCoupon: null });
+    return;
+  }
+  const subtotal = state.cartSubtotal();
+  if (subtotal === 0) {
+    set({ appliedCoupon: null });
+    return;
+  }
+  if (coupon.minPurchase > 0 && subtotal < coupon.minPurchase) {
+    set({ appliedCoupon: null });
+    return;
+  }
+  set({ appliedCoupon: { ...applied, discountAmount: computeDiscount(coupon, subtotal) } });
+}
 
 // Mock data generators
 function generateMockSales(): SaleRecord[] {
@@ -407,25 +522,35 @@ function generateMockSales(): SaleRecord[] {
 
 function generateMockSuppliers(): Supplier[] {
   return [
-    { id: "sup-1", name: "شركة الفواكه الطازجة", phone: "0501234567", address: "الرياض - حي العليا", notes: "مورد فواكه رئيسي", createdAt: new Date() },
-    { id: "sup-2", name: "مؤسسة الألبان المتحدة", phone: "0559876543", address: "جدة - طريق المدينة", notes: "ألبان وأجبان", createdAt: new Date() },
-    { id: "sup-3", name: "مصنع المخبوزات الذهبية", phone: "0531112233", address: "الدمام - المنطقة الصناعية", notes: "خبز ومعجنات", createdAt: new Date() },
+    { id: "sup-1", name: "Fresh Fruits Co.", phone: "0501234567", address: "Riyadh - Olaya", notes: "Main fruits supplier", createdAt: new Date() },
+    { id: "sup-2", name: "United Dairy", phone: "0559876543", address: "Jeddah - Madinah Rd", notes: "Dairy & cheese", createdAt: new Date() },
+    { id: "sup-3", name: "Golden Bakery", phone: "0531112233", address: "Dammam - Industrial", notes: "Bread & pastries", createdAt: new Date() },
   ];
 }
 
 function generateMockCustomers(): Customer[] {
   return [
-    { id: "cust-1", name: "أحمد محمد", phone: "0541234567", address: "حي السلام", notes: "عميل دائم", createdAt: new Date() },
-    { id: "cust-2", name: "فهد العتيبي", phone: "0559998877", address: "حي النسيم", notes: "", createdAt: new Date() },
-    { id: "cust-3", name: "سعد الدوسري", phone: "0531114455", address: "حي الملز", notes: "يشتري بالجملة", createdAt: new Date() },
+    { id: "cust-1", name: "Ahmed Mohammed", phone: "0541234567", address: "Al-Salam", notes: "Loyal customer", createdAt: new Date() },
+    { id: "cust-2", name: "Fahad Al-Otaibi", phone: "0559998877", address: "Al-Naseem", notes: "", createdAt: new Date() },
+    { id: "cust-3", name: "Saad Al-Dosari", phone: "0531114455", address: "Al-Malaz", notes: "Buys wholesale", createdAt: new Date() },
   ];
 }
 
 function generateMockExpenses(): Expense[] {
   const now = new Date();
   return [
-    { id: "exp-1", description: "إيجار المحل", amount: 5000, category: "إيجار", date: new Date(now.getFullYear(), now.getMonth(), 1) },
-    { id: "exp-2", description: "فاتورة كهرباء", amount: 800, category: "مرافق", date: new Date(now.getFullYear(), now.getMonth(), 5) },
-    { id: "exp-3", description: "رواتب الموظفين", amount: 8000, category: "رواتب", date: new Date(now.getFullYear(), now.getMonth(), 1) },
+    { id: "exp-1", description: "Shop rent", amount: 5000, category: "Rent", date: new Date(now.getFullYear(), now.getMonth(), 1) },
+    { id: "exp-2", description: "Electricity bill", amount: 800, category: "Utilities", date: new Date(now.getFullYear(), now.getMonth(), 5) },
+    { id: "exp-3", description: "Staff salaries", amount: 8000, category: "Salaries", date: new Date(now.getFullYear(), now.getMonth(), 1) },
+  ];
+}
+
+function generateMockCoupons(): Coupon[] {
+  const future = new Date();
+  future.setMonth(future.getMonth() + 3);
+  return [
+    { id: "cpn-1", code: "WELCOME10", type: "percentage", value: 10, minPurchase: 0, maxUses: 0, usedCount: 0, active: true, createdAt: new Date(), expiryDate: future },
+    { id: "cpn-2", code: "SAVE20", type: "percentage", value: 20, minPurchase: 100, maxUses: 50, usedCount: 0, active: true, createdAt: new Date(), expiryDate: future },
+    { id: "cpn-3", code: "FLAT15", type: "fixed", value: 15, minPurchase: 50, maxUses: 0, usedCount: 0, active: true, createdAt: new Date() },
   ];
 }

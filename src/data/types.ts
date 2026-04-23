@@ -74,8 +74,30 @@ export type Alert = {
   id: string;
   type: "low_stock" | "out_of_stock" | "overdue_debt" | "low_profit";
   message: string;
+  // For i18n: optional structured payload so consumer can localize.
+  i18nKey?: string;
+  i18nParams?: Record<string, string | number>;
   severity: "warning" | "critical";
   date: Date;
   dismissed: boolean;
   referenceId?: string;
+};
+
+export type Coupon = {
+  id: string;
+  code: string;
+  type: "percentage" | "fixed";
+  value: number; // percent (0-100) or fixed amount
+  minPurchase: number; // 0 = none
+  maxUses: number; // 0 = unlimited
+  usedCount: number;
+  expiryDate?: Date;
+  active: boolean;
+  createdAt: Date;
+};
+
+export type AppliedCoupon = {
+  couponId: string;
+  code: string;
+  discountAmount: number;
 };

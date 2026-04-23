@@ -1,4 +1,5 @@
 import { categories } from "@/data/products";
+import { useI18n } from "@/lib/i18n";
 
 interface CategoryBarProps {
   activeCategory: string;
@@ -6,6 +7,16 @@ interface CategoryBarProps {
 }
 
 const CategoryBar = ({ activeCategory, onCategoryChange }: CategoryBarProps) => {
+  const { t } = useI18n();
+  const labelMap: Record<string, string> = {
+    all: t("catAll"),
+    fruits: t("catFruits"),
+    vegetables: t("catVegetables"),
+    dairy: t("catDairy"),
+    bakery: t("catBakery"),
+    drinks: t("catDrinks"),
+    canned: t("catCanned"),
+  };
   return (
     <div className="flex gap-2 overflow-x-auto py-2 pos-scrollbar">
       {categories.map((cat) => (
@@ -19,7 +30,7 @@ const CategoryBar = ({ activeCategory, onCategoryChange }: CategoryBarProps) => 
           }`}
         >
           <span className="text-lg">{cat.icon}</span>
-          <span>{cat.name}</span>
+          <span>{labelMap[cat.id] || cat.name}</span>
         </button>
       ))}
     </div>
